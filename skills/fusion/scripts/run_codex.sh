@@ -4,7 +4,7 @@
 # Usage:
 #   run_codex.sh <prompt_file> <output_file> [reasoning_effort]
 #
-# - <prompt_file>   : path to a file containing the FULL panelist prompt (lens preamble + verbatim user task)
+# - <prompt_file>   : path to a file containing the FULL panelist prompt (verbatim user task + brief instruction)
 # - <output_file>   : where the panelist's final answer is written (clean, just the answer)
 # - reasoning_effort: low | medium | high   (default: medium)
 #

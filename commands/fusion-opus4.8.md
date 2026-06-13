@@ -1,14 +1,15 @@
 ---
-description: Fusion chain with a second Opus 4.8 as the checker (opus4.8-4.8)
+description: Fusion panel of two independent Opus 4.8 runs, judged by Opus 4.8 (opus4.8-4.8)
 argument-hint: <your question>
 ---
-Invoke the **fusion** skill on the task below, forcing the `opus4.8-4.8` chain:
-Opus 4.8 drafts a complete answer → a SECOND Opus 4.8 (Agent subagent) independently checks it →
-Opus fuses draft + critique into the final answer.
+Invoke the **fusion** skill on the task below, forcing the `opus4.8-4.8` panel:
+run the same prompt twice as TWO independent Opus 4.8 panelists (Agent subagents, in parallel, neither
+seeing the other's work) → Opus 4.8 judges both answers → Opus writes the final answer grounded in the
+analysis.
 
-Follow the skill's SKILL.md exactly (generate → check → fuse) and present the standard sections
-(Confirmed / Corrections / Contradictions / Gaps filled / Blind spots / Final answer). Do NOT use a
-GPT-5.5 or Gemini checker for this command, even if codex/gemini are installed — this command is
-pinned to the pure-Opus chain.
+Follow the skill's SKILL.md exactly (fan out in parallel → judge → grounded final answer) and present the
+standard sections (Consensus / Contradictions / Partial coverage / Unique insights / Blind spots / Final
+answer). Do NOT add a GPT-5.5 or Gemini panelist, even if codex/gemini are installed — this command is
+pinned to the pure-Opus panel. Do not assign the two runs any "lenses" — pass the task verbatim to both.
 
 Task: $ARGUMENTS

@@ -25,8 +25,8 @@ echo
 
 # Report which chains are usable on this machine.
 have() { command -v "$1" >/dev/null 2>&1; }
-echo "Chain availability here:"
-echo "  opus4.8-4.8                  : ready (Opus generator + Opus checker, no external CLI)"
+echo "Panel availability here:"
+echo "  opus4.8-4.8                  : ready (two independent Opus 4.8 runs, judged by Opus — no external CLI)"
 if have codex; then
   echo "  opus4.8-gpt5.5               : ready (codex found: $(codex --version 2>/dev/null | head -1))"
 else
