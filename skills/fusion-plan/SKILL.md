@@ -24,26 +24,44 @@ execution all stay on OMC's rails.
 **Hard rule (same as fusion): Opus 4.8 always judges and synthesizes. You are the judge — stay separate
 from the panelists.** The Opus panelist is always a *spawned subagent*, never you.
 
-## Step 0 — Gather requirements via the OMC interview (auto-chain)
+## Step 0 — Requirements (pick the mode FIRST)
 
-Run OMC's requirements interview by invoking the OMC plan skill on the user's request **verbatim**:
+**Decide interactive vs non-interactive before doing anything — this determines whether you may interview.**
+
+- **Non-interactive** when ANY of these is true: invoked with `--no-interview`; running autonomously while
+  executing a larger plan; running inside a spawned sub-agent; or you otherwise cannot reach a human who
+  will answer. **This is the default during plan execution.**
+- **Interactive** only when a human is clearly present and able to answer right now — typically the user
+  typed `/fusion-plan ...` directly in the main session at the start of a planning session.
+
+### Non-interactive mode (autonomous / sub-agent / `--no-interview`)
+
+**HARD RULE: do NOT interview. Do NOT call `AskUserQuestion`. Do NOT auto-chain the `omc-plan` interview.**
+There is no one to answer — blocking on a question would hang the run. Requirements were already gathered
+upstream, so derive `SEED_PLAN` from the context that already exists, in this order:
+
+1. The task/story doc if one exists (e.g. `docs/stories/STORY-<id>.md`).
+2. The larger plan that flagged this task (e.g. the relevant `.omc/plans/*.md` section).
+3. The task description / prompt args you were given.
+
+If that context is genuinely insufficient to plan, do NOT guess and do NOT ask — stop and return a short
+note listing exactly what's missing, so the human (or the orchestrator) resolves it. Then go to Step 1.
+
+### Interactive mode (human present)
+
+Run OMC's real requirements interview by invoking the OMC plan skill on the user's request **verbatim**:
 
 ```
 Skill("oh-my-claudecode:omc-plan")   # pass the user's request; do NOT pass --consensus
 ```
 
-- Let OMC auto-detect **interview vs direct** mode. For broad/vague requests it interviews (one question at
-  a time via `AskUserQuestion`, explores the codebase before asking codebase questions, consults the
-  Analyst for hidden requirements); for already-detailed requests it plans directly. Either way it writes
-  an initial plan to **`.omc/plans/<slug>.md`**.
-- Do **NOT** pass `--consensus` here (that starts OMC's own Planner→Architect→Critic loop + `ralplan-state`
-  machine — redundant, since the fusion panel is doing the deep thinking). Do **NOT** let OMC hand off to
-  execution (`/team`/`/ralph`) yet — stop at the plan.
-- **Capture the plan file path** OMC created (it reports where it saved; otherwise take the newest
-  `.omc/plans/*.md`). Call it `SEED_PLAN`. It carries every requirement/constraint the interview gathered —
-  these must survive into the final plan.
-- If the `omc-plan` skill is unavailable, say so and fall back to a minimal inline interview
-  (`AskUserQuestion`, one question at a time, explore-first) to gather requirements before continuing.
+- Let OMC auto-detect **interview vs direct** mode (one question at a time via `AskUserQuestion`,
+  explore-first, Analyst consult). It writes an initial plan to **`.omc/plans/<slug>.md`**.
+- Do **NOT** pass `--consensus` (redundant with the fusion panel) and do **NOT** let OMC hand off to
+  execution yet — stop at the plan.
+- **Capture the plan file path** as `SEED_PLAN` (newest `.omc/plans/*.md` if not reported). It carries the
+  gathered requirements — they must survive into the final plan.
+- If `omc-plan` is unavailable, fall back to a minimal inline interview (one question at a time).
 
 ## Step 1 — Preconditions
 
@@ -95,7 +113,9 @@ round-R prompt. The only shared input across a round is the previous round's syn
 ### 2b. Launch BOTH panelists in ONE turn (parallel, blind)
 
 - **Opus 4.8 panelist** → `Agent` tool, `subagent_type: general-purpose`, `model: opus`, prompt = the
-  panelist prompt above. Spawn a **fresh** subagent each round.
+  panelist prompt above. Spawn a **fresh** subagent each round. **Prefix the Agent prompt's first line with
+  the literal marker `[FUSION-PANELIST]`** so spawn hooks recognize and skip fusion's own panelist spawns
+  (otherwise the plan-nudge backstop would fire on them).
 - **GPT-5.5 panelist** → write the prompt to a temp file and run codex at **high** effort:
   ```bash
   printf '%s' "$PROMPT" > /tmp/fusion_plan_codex_r${R}_prompt.txt
@@ -137,6 +157,10 @@ in the OMC standard format:
 - **Verification** — how each step is proven end-to-end. In the KHON repo, map to the proof-ladder (L0–L4)
   and "mutation needs readback / cross-service needs same-run proof".
 - **ADR** (compact) — Decision · Drivers · Alternatives rejected (+ why) · Consequences. A few lines each.
+- **Sub-task flags (only if the plan decomposes into multiple sub-tasks/stories):** mark each NON-TRIVIAL
+  sub-task inline with `⟡ DEEP-PLAN: /fusion-plan --no-interview before implementing`. This is how
+  autonomous execution knows where to trigger a per-task panel (requirements will come from this plan +
+  any story doc, non-interactively). Leave trivial sub-tasks unflagged — don't flag everything.
 
 Keep ceremony minimal: add a pre-mortem / expanded test matrix ONLY if the task is genuinely high-risk
 (auth/security, migration, destructive/irreversible, production incident, PII). Otherwise the six sections

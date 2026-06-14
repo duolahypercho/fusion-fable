@@ -81,8 +81,11 @@ final answer) for auditing.
 `/fusion-plan` applies the panel to **planning**. Instead of one panel→judge pass it runs the panel as an
 **iterative loop** and plugs into the **oh-my-claudecode (OMC)** plan system end to end:
 
-1. **Interview first** — auto-chains OMC's `omc-plan` skill to gather requirements (one question at a time,
-   explore-first, Analyst consult) and write an initial plan to `.omc/plans/<slug>.md`.
+1. **Requirements** — *interactive* (you run `/fusion-plan` yourself): auto-chains OMC's `omc-plan`
+   interview (one question at a time, explore-first, Analyst consult) → initial plan in
+   `.omc/plans/<slug>.md`. *Non-interactive* (autonomous run, inside a sub-agent, or `--no-interview`):
+   **no interview** — derives requirements from the existing story doc / plan context, so it never hangs
+   waiting on an answer no one is there to give.
 2. **Deepen (3 rounds, seeded)** — each round an Opus 4.8 panelist and a GPT-5.5 panelist (via `codex`)
    independently critique-and-improve the current plan **in parallel and blind**; Opus 4.8 judges and
    synthesizes one tighter plan that seeds the next round. Stops early on `NO_MATERIAL_CHANGE`.
@@ -99,6 +102,15 @@ execution. It works best with OMC installed; without OMC it falls back to a mini
 the base panel it needs the `codex` CLI for the GPT-5.5 half (otherwise it falls back to two Opus 4.8
 panelists per round). Reserve it for high-stakes planning — it costs an interview + ~6 panelist runs + 3
 judge passes.
+
+### Optional backstop hook
+
+`hooks/fusion-plan-nudge.sh` is an optional `PreToolUse` hook (matcher `Agent|Task`). When the orchestrator
+is about to delegate a non-trivial *implementation* task to a sub-agent, it injects an advisory reminder to
+run `/fusion-plan --no-interview` on it first. It is advisory only (never blocks), de-dupes per task, and
+skips fusion's own panelist spawns. `install.sh` copies it to `~/.claude/hooks/` but does **not** enable it
+— opt in by adding it to your `settings.json` (the installer prints the snippet). Leave it off to keep
+planning fully manual.
 
 ## Requirements
 
@@ -145,7 +157,9 @@ commands/
   fusion-gpt5.5.md          /fusion-gpt5.5   (pinned opus4.8-gpt5.5 panel)
   fusion-3.md               /fusion-3        (pinned full opus4.8-gpt5.5-gemini3.1pro panel)
   fusion-plan.md            /fusion-plan     (OMC-integrated iterative planning; reuses fusion's run_codex.sh)
-install.sh                  copies the above into ~/.claude
+hooks/
+  fusion-plan-nudge.sh      optional PreToolUse backstop (not auto-enabled) — nudges /fusion-plan on spawn
+install.sh                  copies the above into ~/.claude (hook copied but left disabled)
 ```
 
 ## Why a panel beats one model

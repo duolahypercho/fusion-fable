@@ -1,14 +1,19 @@
 ---
-description: OMC interview → 3-round Opus 4.8 + GPT-5.5 fusion deepening → concise .omc/plans/ output → review/execute handoff
-argument-hint: <what to plan / decide>
+description: OMC interview (interactive) → 3-round Opus 4.8 + GPT-5.5 fusion deepening → concise .omc/plans/ output → review/execute handoff
+argument-hint: "[--no-interview] <what to plan / decide>"
 ---
 Invoke the **fusion-plan** skill on the task below. Run the full OMC-integrated flow:
 
-1. **Requirements first (auto-chain):** run OMC's real interview by invoking
-   `Skill("oh-my-claudecode:omc-plan")` on the task verbatim (no `--consensus`; let it auto-detect
-   interview vs direct). It gathers requirements one question at a time, explores the codebase, consults
-   the Analyst, and writes an initial plan to `.omc/plans/<slug>.md`. Capture that path as the seed; do not
-   let OMC auto-execute.
+1. **Requirements — pick the mode FIRST (Step 0 of SKILL.md):**
+   - **Non-interactive** (default during plan execution, inside a sub-agent, or `--no-interview`): **do NOT
+     interview, do NOT call AskUserQuestion, do NOT auto-chain omc-plan.** Derive requirements from existing
+     context (story doc `docs/stories/STORY-*.md`, the flagged section of the larger `.omc/plans/*.md`, and
+     the task args) as the seed. If context is insufficient, stop and report what's missing — never block on
+     an unanswerable question.
+   - **Interactive** (a human is present, typed `/fusion-plan` directly): run OMC's real interview via
+     `Skill("oh-my-claudecode:omc-plan")` on the task verbatim (no `--consensus`; auto-detect interview vs
+     direct) → initial plan in `.omc/plans/<slug>.md`. Capture that path as the seed; do not let OMC
+     auto-execute.
 2. **Deepen with the panel (3 rounds, seeded):** each round, ONE Opus 4.8 panelist (Agent subagent,
    `model: opus`) and ONE GPT-5.5 panelist (`codex exec`, **high** effort) independently critique-and-improve
    the current plan IN PARALLEL and BLIND. Round 1 seeds from the OMC plan (so every interview requirement
