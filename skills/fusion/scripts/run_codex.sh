@@ -32,6 +32,13 @@ case "$output_file" in
   *) output_file="$(pwd -P)/$output_file" ;;
 esac
 
+if [ ! -s "$prompt_file" ]; then
+  echo "[run_codex.sh] prompt file is missing or empty: $prompt_file" >&2
+  exit 2
+fi
+mkdir -p "$(dirname "$output_file")"
+rm -f "$output_file"
+
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/fusion-codex.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 workdir="$scratch/workdir"

@@ -82,6 +82,8 @@ attributed to the panelist that raised it, so you can see how the answer was ass
   It runs against a throwaway copy of the current repo/workdir with trusted local access so tools such as
   `gh`, local test runners, Docker, and SDK-managed toolchains behave like they do in your terminal without
   writing back to the live checkout.
+  Each Fusion invocation uses its own temporary prompt/output directory, so concurrent runs in different
+  Claude Code sessions do not read each other's GPT panelist artifacts.
 - For the 3-model panel: a `gemini` CLI installed and authenticated. Adjust the invocation in
   `skills/fusion/scripts/run_gemini.sh` to match your CLI's flags.
 
