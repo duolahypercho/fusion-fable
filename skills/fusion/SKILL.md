@@ -60,9 +60,12 @@ Launch **all panelists in a single turn** so they run concurrently:
   Spawn them in the same message so they run at once; each returned answer is one panel response.
 - **GPT-5.5 panelist** → write its prompt to a temp file and run in the background:
   ```bash
-  bash <skill_dir>/scripts/run_codex.sh /tmp/fusion_codex_prompt.txt /tmp/fusion_codex_out.md medium
+  bash <skill_dir>/scripts/run_codex.sh /tmp/fusion_codex_prompt.txt /tmp/fusion_codex_out.md xhigh
   ```
-  `-o` makes codex write only its final answer to the out file; read it once it finishes.
+  The runner copies the current repo/workdir to a throwaway directory, then launches `codex exec` with
+  full local access against that copy. This preserves the live checkout while letting the GPT-5.5 panelist
+  use the same local tools and keychain-backed credentials as a trusted terminal Codex run. `-o` makes
+  codex write only its final answer to the out file; read it once it finishes.
 - **Gemini panelist** → `bash <skill_dir>/scripts/run_gemini.sh /tmp/fusion_gemini_prompt.txt /tmp/fusion_gemini_out.md`.
   Exit 127 means the CLI isn't installed — drop Gemini and note the panel downgraded.
 
