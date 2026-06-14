@@ -76,6 +76,30 @@ attributed to the panelist that raised it, so you can see how the answer was ass
 written to a timestamped provenance file under `~/.claude/fusion-runs/` (raw panelist answers + analysis +
 final answer) for auditing.
 
+## Planning: `/fusion-plan` (iterative + OMC-integrated)
+
+`/fusion-plan` applies the panel to **planning**. Instead of one panel→judge pass it runs the panel as an
+**iterative loop** and plugs into the **oh-my-claudecode (OMC)** plan system end to end:
+
+1. **Interview first** — auto-chains OMC's `omc-plan` skill to gather requirements (one question at a time,
+   explore-first, Analyst consult) and write an initial plan to `.omc/plans/<slug>.md`.
+2. **Deepen (3 rounds, seeded)** — each round an Opus 4.8 panelist and a GPT-5.5 panelist (via `codex`)
+   independently critique-and-improve the current plan **in parallel and blind**; Opus 4.8 judges and
+   synthesizes one tighter plan that seeds the next round. Stops early on `NO_MATERIAL_CHANGE`.
+3. **Write back** — the converged plan is written back to the same `.omc/plans/<slug>.md`, kept **concise
+   but content-dense** (the judge compresses across rounds rather than accumulating length).
+4. **Handoff** — offers the OMC quality gate (`/omc-plan --review`) → execution (`/team` or `/ralph`).
+
+```
+/fusion-plan design the schema + flow for <feature>
+```
+
+The panel replaces only the *plan-thinking* step; OMC owns the interview, plan format, quality gate, and
+execution. It works best with OMC installed; without OMC it falls back to a minimal inline interview. Like
+the base panel it needs the `codex` CLI for the GPT-5.5 half (otherwise it falls back to two Opus 4.8
+panelists per round). Reserve it for high-stakes planning — it costs an interview + ~6 panelist runs + 3
+judge passes.
+
 ## Requirements
 
 - **Claude Code**, with the session running **Opus 4.8** (panelist subagents and the judge inherit the
@@ -114,10 +138,13 @@ skills/fusion/
   references/
     panel.md                why independent parallel runs (no lenses) — the panel mechanism
     judge_rubric.md         the structured analysis + grounded final answer
+skills/fusion-plan/
+  SKILL.md                  OMC interview → 3-round seeded panel → concise .omc/plans/ → review/execute
 commands/
   fusion-opus4.8.md         /fusion-opus4.8  (pinned opus4.8-4.8 panel)
   fusion-gpt5.5.md          /fusion-gpt5.5   (pinned opus4.8-gpt5.5 panel)
   fusion-3.md               /fusion-3        (pinned full opus4.8-gpt5.5-gemini3.1pro panel)
+  fusion-plan.md            /fusion-plan     (OMC-integrated iterative planning; reuses fusion's run_codex.sh)
 install.sh                  copies the above into ~/.claude
 ```
 

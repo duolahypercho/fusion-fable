@@ -3,6 +3,7 @@
 #
 # Copies:
 #   skills/fusion        -> $CLAUDE_DIR/skills/fusion
+#   skills/fusion-plan   -> $CLAUDE_DIR/skills/fusion-plan
 #   commands/*.md         -> $CLAUDE_DIR/commands/
 # where CLAUDE_DIR defaults to ~/.claude (override with CLAUDE_CONFIG_DIR).
 
@@ -15,12 +16,14 @@ mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/commands"
 
 rm -rf "$CLAUDE_DIR/skills/fusion"
 cp -R "$HERE/skills/fusion" "$CLAUDE_DIR/skills/fusion"
+rm -rf "$CLAUDE_DIR/skills/fusion-plan"
+cp -R "$HERE/skills/fusion-plan" "$CLAUDE_DIR/skills/fusion-plan"
 cp "$HERE/commands/"*.md "$CLAUDE_DIR/commands/"
 chmod +x "$CLAUDE_DIR/skills/fusion/scripts/"*.sh
 
 echo "✓ Installed Fusion-Fable into $CLAUDE_DIR"
-echo "    skill    : $CLAUDE_DIR/skills/fusion"
-echo "    commands : /fusion-opus4.8  /fusion-gpt5.5  /fusion-3"
+echo "    skills   : $CLAUDE_DIR/skills/fusion , $CLAUDE_DIR/skills/fusion-plan"
+echo "    commands : /fusion-opus4.8  /fusion-gpt5.5  /fusion-3  /fusion-plan"
 echo
 
 # Report which chains are usable on this machine.
@@ -38,4 +41,10 @@ else
   echo "  opus4.8-gpt5.5-gemini3.1pro  : needs the 'agy' CLI (Antigravity; install + seed its keyring for Gemini 3.1 Pro)"
 fi
 echo
-echo "Next: restart Claude Code (or run /reload-skills) so 'fusion' and the slash commands load."
+echo "/fusion-plan (OMC-integrated iterative planning):"
+echo "  - Runs an OMC interview first (auto-chains the 'omc-plan' skill), then deepens the plan with the"
+echo "    3-round opus4.8-gpt5.5 panel and writes a concise plan to .omc/plans/."
+echo "  - Best with oh-my-claudecode (OMC) installed for the interview + review/execute handoff;"
+echo "    without OMC it falls back to a minimal inline interview."
+echo
+echo "Next: restart Claude Code (or run /reload-skills) so the skills and slash commands load."
