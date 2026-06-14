@@ -1,0 +1,73 @@
+--- /opt/pinchpoint-gateway/src/routes/agent-ws.js.bak-agent-route-20260603-1538	2026-06-03 15:36:05.126347401 -0400
++++ /opt/pinchpoint-gateway/src/routes/agent-ws.js	2026-06-14 11:07:27.633731896 -0400
+@@ -1,5 +1,5 @@
+ /**
+- * Agent WebSocket endpoint — /ws/agent
++ * Agent WebSocket endpoint.
+  *
+  * Handles persistent WebSocket connections from Pinchpoint local agents.
+  * Agents authenticate with their API token, register their capabilities,
+@@ -34,6 +34,32 @@
+   return [...agents].map(id => agentsById.get(id)).filter(Boolean);
+ }
+ 
++function attachAccumulatedStream(result, streamChunks = []) {
++  const payload = result && typeof result === 'object' && !Array.isArray(result)
++    ? { ...result }
++    : { data: result };
++
++  if (!streamChunks.length) return payload;
++
++  const stdout = streamChunks
++    .filter(chunk => chunk?.channel === 'stdout')
++    .map(chunk => typeof chunk.data === 'string' ? chunk.data : '')
++    .join('');
++  const stderr = streamChunks
++    .filter(chunk => chunk?.channel === 'stderr')
++    .map(chunk => typeof chunk.data === 'string' ? chunk.data : '')
++    .join('');
++
++  payload.stream = streamChunks;
++  if (stdout && payload.stdout == null) payload.stdout = stdout;
++  if (stderr && payload.stderr == null) payload.stderr = stderr;
++  if (stdout && !payload.data) {
++    payload.data = stderr ? `${stdout}\n--- stderr ---\n${stderr}` : stdout;
++  }
++
++  return payload;
++}
++
+ /**
+  * Send a command to a user's agent and wait for the result.
+  * If the user has multiple agents, sends to the first available one.
+@@ -155,8 +181,7 @@
+ 
+ // ─── Route Plugin ────────────────────────────────────────────────────────────
+ 
+-export default async function agentWsRoutes(fastify, opts) {
+-  fastify.get('/ws/agent', { websocket: true }, (socket, req) => {
++export function handleAgentConnection(fastify, socket, req) {
+     const agentId = `agent_${nextAgentId++}`;
+     let userId = null;
+     let registered = false;
+@@ -246,7 +271,7 @@
+ 
+         switch (msg.type) {
+           case 'result':
+-            pending.resolve(msg.payload);
++            pending.resolve(attachAccumulatedStream(msg.payload, pending.streamChunks || []));
+             break;
+           case 'error':
+           case 'perm_denied':
+@@ -298,6 +323,11 @@
+     socket.on('error', (err) => {
+       fastify.log.error({ err }, `[agent-ws] ${agentId} error`);
+     });
++}
++
++export default async function agentWsRoutes(fastify, opts) {
++  fastify.get('/ws/agent', { websocket: true }, (socket, req) => {
++    handleAgentConnection(fastify, socket, req);
+   });
+ 
+   // ── REST endpoint to check agent status ─────────────────────────────────

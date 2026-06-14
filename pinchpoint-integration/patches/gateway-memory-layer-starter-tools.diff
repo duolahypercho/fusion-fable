@@ -1,0 +1,26 @@
+--- /opt/pinchpoint-gateway/src/middleware/memory-layer.js.bak-fusion-fable-tools-20260614T145442Z	2026-06-14 10:54:42.280566221 -0400
++++ /opt/pinchpoint-gateway/src/middleware/memory-layer.js	2026-06-14 10:54:42.287566260 -0400
+@@ -761,10 +761,6 @@
+ 
+ export function injectCoreMemoryTools(body) {
+   if (!body) return false;
+-  const inlineCoreTools = body.metadata?.inline_core_tools === true
+-    || process.env.PINCHPOINT_INLINE_CORE_TOOLS === '1';
+-  if (!inlineCoreTools) return false;
+-
+   if (!body.tools) body.tools = [];
+ 
+   const before = body.tools.length;
+@@ -777,12 +773,6 @@
+ 
+   ensureTool(RECALL_TOOL);
+   ensureTool(REMEMBER_TOOL);
+-  ensureTool(LEARN_TOOL);
+-  ensureTool(CONVERSATION_DIGEST_TOOL);
+-  // Persona can change at any time, not only during first-run onboarding.
+-  // tool_search can describe set_persona, but model providers can only call
+-  // functions that are actually present in body.tools.
+-  ensureTool(SET_PERSONA_TOOL);
+ 
+   return body.tools.length > before;
+ }

@@ -1,0 +1,41 @@
+--- /opt/pinchpoint-gateway/src/providers/claude-api.js.bak-fusion-fable-tools-20260614T145442Z	2026-06-14 10:54:42.279566216 -0400
++++ /opt/pinchpoint-gateway/src/providers/claude-api.js	2026-06-14 10:54:42.285566249 -0400
+@@ -228,6 +228,22 @@
+   });
+ }
+ 
++function convertToolChoice(toolChoice) {
++  if (!toolChoice || toolChoice === 'auto') return undefined;
++  if (toolChoice === 'none') return { type: 'none' };
++  if (toolChoice === 'any') return { type: 'any' };
++  if (typeof toolChoice === 'string') return { type: 'tool', name: toolChoice };
++
++  const forcedName = toolChoice.function?.name || toolChoice.name;
++  if (forcedName) return { type: 'tool', name: forcedName };
++
++  if (['auto', 'none', 'any'].includes(toolChoice.type)) {
++    return toolChoice.type === 'auto' ? undefined : { type: toolChoice.type };
++  }
++
++  return undefined;
++}
++
+ export class ClaudeApiProvider extends BaseProvider {
+   constructor() {
+     super('claude');
+@@ -583,6 +599,7 @@
+ 
+     const { systemText, messages: anthropicMessages } = convertMessages(messages);
+     const anthropicTools = convertTools(tools);
++    const anthropicToolChoice = anthropicTools ? convertToolChoice(body.tool_choice) : undefined;
+     const modelMaxOutput = this._maxOutputTokensForModel(apiModel, requestedModel);
+     const clientSetMaxTokens = body.max_tokens != null;
+     const requestedMaxTokens = body.max_tokens || 8192;
+@@ -596,6 +613,7 @@
+ 
+     if (systemText) requestBody.system = systemText;
+     if (anthropicTools) requestBody.tools = anthropicTools;
++    if (anthropicToolChoice) requestBody.tool_choice = anthropicToolChoice;
+     // Fable 5 and Opus 4.7/4.8 reject temperature/top_p (Anthropic controls
+     // sampling internally). Drop them rather than 400 the whole request.
+     const samplingDeprecated = this._samplingParamsDeprecated(apiModel, requestedModel);

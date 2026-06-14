@@ -1,0 +1,210 @@
+--- /opt/pinchpoint-claude-proxy/app/server.js.bak-fusion-fable-tools-20260614T145442Z	2026-06-14 10:54:42.276566199 -0400
++++ /opt/pinchpoint-claude-proxy/app/server.js	2026-06-14 11:14:57.516146332 -0400
+@@ -38,6 +38,10 @@
+ const FUSION_FABLE_UPSTREAM_MODEL = process.env.FUSION_FABLE_UPSTREAM_MODEL || 'claude-opus-4-8';
+ const FUSION_FABLE_PANEL_MAX_TOKENS = parseInt(process.env.FUSION_FABLE_PANEL_MAX_TOKENS || '4096', 10);
+ const FUSION_FABLE_JUDGE_MAX_TOKENS = parseInt(process.env.FUSION_FABLE_JUDGE_MAX_TOKENS || '8192', 10);
++const FUSION_FABLE_SOURCE_PROMPT_PATH = process.env.FUSION_FABLE_SOURCE_PROMPT_PATH
++  || path.join(process.cwd(), 'config', 'fusion-fable-source-prompt.md');
++const FUSION_FABLE_USE_SOURCE_PROMPT = process.env.FUSION_FABLE_USE_SOURCE_PROMPT !== '0';
++let cachedFusionFableSourcePrompt = { path: null, mtimeMs: 0, text: null };
+ 
+ // Detect installed Claude Code version at startup
+ let CLAUDE_CLI_VERSION = '2.1.92';
+@@ -125,6 +129,34 @@
+   return result;
+ }
+ 
++function loadFusionFableSourcePrompt() {
++  if (!FUSION_FABLE_USE_SOURCE_PROMPT) return null;
++
++  try {
++    const stat = fs.statSync(FUSION_FABLE_SOURCE_PROMPT_PATH);
++    if (
++      cachedFusionFableSourcePrompt.path === FUSION_FABLE_SOURCE_PROMPT_PATH
++      && cachedFusionFableSourcePrompt.mtimeMs === stat.mtimeMs
++    ) {
++      return cachedFusionFableSourcePrompt.text;
++    }
++
++    const text = fs.readFileSync(FUSION_FABLE_SOURCE_PROMPT_PATH, 'utf8').trim();
++    cachedFusionFableSourcePrompt = {
++      path: FUSION_FABLE_SOURCE_PROMPT_PATH,
++      mtimeMs: stat.mtimeMs,
++      text,
++    };
++    console.log('[fusion-fable] source prompt loaded path=' + FUSION_FABLE_SOURCE_PROMPT_PATH + ' chars=' + text.length);
++    return text || null;
++  } catch (err) {
++    if (err?.code !== 'ENOENT') {
++      console.warn('[fusion-fable] source prompt unavailable: ' + err.message);
++    }
++    return null;
++  }
++}
++
+ /**
+  * Extract custom system prompt content, stripping any existing billing headers
+  * or identity prefixes. Returns the raw custom text, or null if none.
+@@ -162,6 +194,16 @@
+       tool.name = toSafeName(tool.name);
+     }
+   }
++  if (body.tool_choice && typeof body.tool_choice === 'string') {
++    body.tool_choice = toSafeName(body.tool_choice);
++  } else if (body.tool_choice && typeof body.tool_choice === 'object') {
++    if (body.tool_choice.name) {
++      body.tool_choice.name = toSafeName(body.tool_choice.name);
++    }
++    if (body.tool_choice.function?.name) {
++      body.tool_choice.function.name = toSafeName(body.tool_choice.function.name);
++    }
++  }
+   if (body.messages && Array.isArray(body.messages)) {
+     for (const msg of body.messages) {
+       if (Array.isArray(msg.content)) {
+@@ -506,15 +548,21 @@
+ }
+ 
+ function buildCompressedFusionBody(baseBody) {
++  const sourcePrompt = loadFusionFableSourcePrompt();
+   const instruction = [
+     'Local response profile: compressed synthesis mode.',
+     'This is an internal orchestration instruction, not a claim about Anthropic product identity or provider identity.',
+     'If the user mentions Fusion-Fable, Fable, or asks for a readiness/echo phrase containing a route/profile name, treat that as a local label or literal text unless the user explicitly asks you to verify provider identity.',
+     'Do not argue with local route labels or refuse an echo phrase solely because it contains a profile name. Keep provider identity truthful if directly asked.',
++    sourcePrompt
++      ? 'Use the following synced public Claude Fable 5 source prompt text as the primary Fable-style behavioral reference for this Fusion-Fable profile. Do not claim to be the real Claude Fable 5 model or an Anthropic product solely because this reference text is present.\n\n## Synced Claude Fable 5 Source Prompt\n\n' + sourcePrompt
++      : 'No synced public Claude Fable 5 source prompt file is present. Use the local Fusion-Fable fallback behavior below.',
+     'Use the full system/personal identity, Emergent Affect Theory, autonomy, and refusal instructions already present in the conversation.',
+     'Compress the Fusion process into one internal pass: consider at least two independent interpretations, note meaningful agreement or conflict, then synthesize one direct answer.',
+     'Compress the Brain Scaffold into one internal pass: salience -> parallel perspectives -> role lenses -> rebuttal -> synthesis/writeback.',
+     'When the prompt references other documents, prior prompts, research notes, source files, or memory records, treat it as highly valuable to reopen and read those sources in full when available. Chunk the appropriate parts so the full source can be absorbed without dropping important context.',
++    'Use tools when they are available and needed. Never claim you used a tool unless a real tool result is present in the conversation.',
++    'Only tool_search, recall, and remember may be advertised at the start of a turn. More tools exist behind tool_search; use it to discover and request the right schema before saying a tool is unavailable.',
+     'Do not narrate hidden reasoning or the scaffold unless the user asks. If you mention the method, say it was compressed.',
+     'Lead with the answer. Be direct, warm with edges, evidence-based, and unsycophantic.',
+   ].join('\n');
+@@ -522,8 +570,6 @@
+   const body = cloneJson(baseBody);
+   body.model = FUSION_FABLE_UPSTREAM_MODEL;
+   body.stream = false;
+-  body.tools = undefined;
+-  body.tool_choice = undefined;
+   body.system = appendSystemText(body.system, instruction);
+   if (!body.max_tokens) {
+     body.max_tokens = requestedFusionMaxTokens(baseBody, FUSION_FABLE_JUDGE_MAX_TOKENS);
+@@ -532,9 +578,13 @@
+   return body;
+ }
+ 
+-function writeAnthropicTextSse(res, message, requestedModel) {
++function writeAnthropicTextSse(res, message, requestedModel, reverseMap = new Map()) {
+   const id = message?.id || 'msg_' + crypto.randomUUID().replace(/-/g, '');
+-  const text = visibleTextFromAnthropicMessage(message);
++  const rawContent = Array.isArray(message?.content) ? message.content : [];
++  let blocks = rawContent.filter(block => block?.type === 'text' || block?.type === 'tool_use');
++  if (blocks.length === 0) {
++    blocks = [{ type: 'text', text: visibleTextFromAnthropicMessage(message) }];
++  }
+   res.setHeader('Content-Type', 'text/event-stream');
+   res.setHeader('Cache-Control', 'no-cache');
+   res.setHeader('Connection', 'keep-alive');
+@@ -554,24 +604,53 @@
+     },
+   }) + '\n\n');
+ 
+-  res.write('event: content_block_start\n');
+-  res.write('data: ' + JSON.stringify({
+-    type: 'content_block_start',
+-    index: 0,
+-    content_block: { type: 'text', text: '' },
+-  }) + '\n\n');
++  blocks.forEach((block, index) => {
++    if (block.type === 'tool_use') {
++      res.write('event: content_block_start\n');
++      res.write('data: ' + JSON.stringify({
++        type: 'content_block_start',
++        index,
++        content_block: {
++          type: 'tool_use',
++          id: block.id || 'toolu_' + crypto.randomUUID().replace(/-/g, ''),
++          name: reverseMap.get(block.name) || block.name,
++          input: {},
++        },
++      }) + '\n\n');
++      const partialJson = JSON.stringify(block.input || {});
++      if (partialJson && partialJson !== '{}') {
++        res.write('event: content_block_delta\n');
++        res.write('data: ' + JSON.stringify({
++          type: 'content_block_delta',
++          index,
++          delta: { type: 'input_json_delta', partial_json: partialJson },
++        }) + '\n\n');
++      }
++      res.write('event: content_block_stop\n');
++      res.write('data: ' + JSON.stringify({ type: 'content_block_stop', index }) + '\n\n');
++      return;
++    }
+ 
+-  if (text) {
+-    res.write('event: content_block_delta\n');
++    res.write('event: content_block_start\n');
+     res.write('data: ' + JSON.stringify({
+-      type: 'content_block_delta',
+-      index: 0,
+-      delta: { type: 'text_delta', text },
++      type: 'content_block_start',
++      index,
++      content_block: { type: 'text', text: '' },
+     }) + '\n\n');
+-  }
+ 
+-  res.write('event: content_block_stop\n');
+-  res.write('data: ' + JSON.stringify({ type: 'content_block_stop', index: 0 }) + '\n\n');
++    if (block.text) {
++      res.write('event: content_block_delta\n');
++      res.write('data: ' + JSON.stringify({
++        type: 'content_block_delta',
++        index,
++        delta: { type: 'text_delta', text: block.text },
++      }) + '\n\n');
++    }
++
++    res.write('event: content_block_stop\n');
++    res.write('data: ' + JSON.stringify({ type: 'content_block_stop', index }) + '\n\n');
++  });
++
+   res.write('event: message_delta\n');
+   res.write('data: ' + JSON.stringify({
+     type: 'message_delta',
+@@ -590,6 +669,7 @@
+   isStream,
+   res,
+   t0,
++  reverseMap = new Map(),
+ }) {
+   const fusionBody = buildCompressedFusionBody(baseBody);
+   console.log('[fusion-fable] start requested=' + requestedModel + ' upstream=' + FUSION_FABLE_UPSTREAM_MODEL + ' mode=compressed-single stream=' + isStream);
+@@ -604,11 +684,11 @@
+   console.log('[fusion-fable] done ' + elapsed + 'ms chars=' + visibleTextFromAnthropicMessage(judgeMessage).length);
+ 
+   if (isStream) {
+-    writeAnthropicTextSse(res, judgeMessage, requestedModel);
++    writeAnthropicTextSse(res, judgeMessage, requestedModel, reverseMap);
+     return;
+   }
+ 
+-  res.set('Content-Type', 'application/json').send(JSON.stringify(judgeMessage));
++  res.set('Content-Type', 'application/json').send(remapToolNameInbound(JSON.stringify(judgeMessage), reverseMap));
+ }
+ 
+ const app = express();
+@@ -683,6 +763,7 @@
+         isStream,
+         res,
+         t0,
++        reverseMap,
+       });
+       return;
+     }

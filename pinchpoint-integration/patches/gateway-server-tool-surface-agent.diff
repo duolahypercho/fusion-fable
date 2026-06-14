@@ -1,0 +1,146 @@
+--- /opt/pinchpoint-gateway/src/server.js.bak-fusion-fable-tools-20260614T145442Z	2026-06-14 10:54:42.278566210 -0400
++++ /opt/pinchpoint-gateway/src/server.js	2026-06-14 10:59:54.510280306 -0400
+@@ -835,6 +835,13 @@
+   'browse',
+ ]);
+ 
++const INITIAL_ADVERTISED_TOOL_NAMES = new Set([
++  'recall',
++  'ExtRecall',
++  'remember',
++  'ExtRemember',
++]);
++
+ function snapshotRequestTools(body) {
+   return Array.isArray(body.tools) ? body.tools.map(tool => ({ ...tool })) : [];
+ }
+@@ -844,13 +851,17 @@
+ }
+ 
+ function isServerOwnedToolName(name) {
+-  return isToolSearchName(name) || SERVER_OWNED_TOOL_NAMES.has(name);
++  return isToolSearchCallName(name) || SERVER_OWNED_TOOL_NAMES.has(name);
+ }
+ 
+ function isGatewayRoutedToolName(name) {
+   return isServerOwnedToolName(name) || isAgentToolCall(name);
+ }
+ 
++function isInitialAdvertisedToolName(name) {
++  return isToolSearchCallName(name) || INITIAL_ADVERTISED_TOOL_NAMES.has(name);
++}
++
+ function requestHasServerOwnedTools(body) {
+   return Array.isArray(body.tools)
+     && body.tools.some(tool => isGatewayRoutedToolName(getToolName(tool)));
+@@ -892,8 +903,10 @@
+   let promoted = 0;
+ 
+   for (const record of result?.results || []) {
+-    if (!record?.source || record.source !== 'gateway') continue;
+-    if (!isGatewayRoutedToolName(record.name) || isToolSearchName(record.name)) continue;
++    if (!record?.source || !record.name || record.executable === false) continue;
++    if (isToolSearchCallName(record.name)) continue;
++    if (record.source === 'gateway' && !isGatewayRoutedToolName(record.name)) continue;
++    if (record.source !== 'gateway' && record.source !== 'request') continue;
+     if (existing.has(record.name)) continue;
+ 
+     const tool = toolRecordToOpenAiTool(record);
+@@ -909,21 +922,42 @@
+ function toolChoiceForcesSpecificTool(toolChoice) {
+   if (!toolChoice || toolChoice === 'auto' || toolChoice === 'none') return false;
+   if (typeof toolChoice === 'string') return toolChoice !== 'auto' && toolChoice !== 'none';
+-  return true;
++  if (['auto', 'none', 'any'].includes(toolChoice.type)) return false;
++  return Boolean(toolChoiceName(toolChoice));
+ }
+ 
+ function toolChoiceName(toolChoice) {
++  if (typeof toolChoice === 'string') return toolChoice;
+   if (!toolChoice || typeof toolChoice !== 'object') return '';
+   return toolChoice?.function?.name || toolChoice?.name || '';
+ }
+ 
++function isToolSearchCallName(name) {
++  return isToolSearchName(name) || ['ExtToolSearch', 'ExtSearchTools'].includes(String(name || ''));
++}
++
++function pruneInitialAdvertisedTools(body) {
++  if (!Array.isArray(body?.tools)) return 0;
++
++  const before = body.tools.length;
++  body.tools = body.tools.filter(tool => isInitialAdvertisedToolName(getToolName(tool)));
++
++  if (
++    toolChoiceForcesSpecificTool(body.tool_choice)
++    && !isInitialAdvertisedToolName(toolChoiceName(body.tool_choice))
++  ) {
++    body.tool_choice = 'auto';
++  }
++
++  return before - body.tools.length;
++}
++
+ function maybeInjectToolSearch(body) {
+   if (body?.metadata?.disable_tool_search === true) return false;
+   if (process.env.PINCHPOINT_DISABLE_TOOL_SEARCH === '1') return false;
+-  if (toolChoiceForcesSpecificTool(body.tool_choice) && !isToolSearchName(toolChoiceName(body.tool_choice))) return false;
+ 
+   const tools = Array.isArray(body.tools) ? body.tools : [];
+-  const hasToolSearch = tools.some(tool => isToolSearchName(tool?.function?.name || tool?.name));
++  const hasToolSearch = tools.some(tool => isToolSearchCallName(tool?.function?.name || tool?.name));
+   if (hasToolSearch) return false;
+ 
+   body.tools = [...tools, TOOL_SEARCH_TOOL_DEFINITION];
+@@ -1097,7 +1131,7 @@
+   for (const toolCall of toolCalls) {
+     const name = toolCall.function?.name || toolCall.name;
+ 
+-    if (isToolSearchName(name)) {
++    if (isToolSearchCallName(name)) {
+       console.log('[route] Model called tool_search — resolving catalog and re-running');
+       toolResults.push(await buildToolSearchResult(toolCall, requestTools, body));
+       continue;
+@@ -1235,6 +1269,9 @@
+     if (toolResults.length === 0) break;
+ 
+     body.messages.push(assistantMessageForToolResults(result.choices[0].message, toolResults), ...toolResults);
++    if (toolChoiceForcesSpecificTool(body.tool_choice)) {
++      body.tool_choice = 'auto';
++    }
+     loops += 1;
+     compactPromptHtmlForRoute(`${routeLabel} tool-rerun`, body);
+     scheduleHeadroomShadow(`${routeLabel} tool-rerun`, body, { ...context, model: body.model });
+@@ -1777,6 +1814,16 @@
+     conversationId = crypto.randomUUID();
+   }
+ 
++  if (userId && injectCoreMemoryTools(body)) {
++    reply.header('X-Pinchpoint-Memory-Tools-Injected', 'recall,remember');
++  }
++  const prunedTools = pruneInitialAdvertisedTools(body);
++  if (prunedTools > 0) {
++    reply.header('X-Pinchpoint-Tools-Pruned', String(prunedTools));
++    console.log(`[route] Pruned ${prunedTools} non-starter tool schema(s); initial surface=tool_search,recall,remember`);
++  }
++  reply.header('X-Pinchpoint-Initial-Tool-Surface', 'tool_search,recall,remember');
++
+   let bufferedStreamHeartbeat = null;
+   let jsonHeartbeat = null;
+   if (requestWantsStream && requestHasServerOwnedTools(body)) {
+@@ -2708,8 +2755,14 @@
+   // Per-user persona + dynamic system prompt (same logic as chat completions)
+   const userId = request.user?.id;
+   if (userId && injectCoreMemoryTools(openaiBody)) {
+-    reply.header('X-Pinchpoint-Memory-Tools-Injected', 'recall,remember,learn,conversation_digest,set_persona');
++    reply.header('X-Pinchpoint-Memory-Tools-Injected', 'recall,remember');
++  }
++  const prunedTools = pruneInitialAdvertisedTools(openaiBody);
++  if (prunedTools > 0) {
++    reply.header('X-Pinchpoint-Tools-Pruned', String(prunedTools));
++    console.log(`[route] /v1/messages pruned ${prunedTools} non-starter tool schema(s); initial surface=tool_search,recall,remember`);
+   }
++  reply.header('X-Pinchpoint-Initial-Tool-Surface', 'tool_search,recall,remember');
+   const persona = userId ? await getUserPersona(userId) : null;
+   const systemPrompt = systemPromptForModel(model, buildSystemPrompt(request.user, persona), openaiBody.messages || []);
+   {

@@ -1,0 +1,42 @@
+--- /opt/pinchpoint-gateway/src/middleware/agent-tools.js.bak-shell-stdout-normalize-20260614T150225Z	2026-06-14 11:02:25.406100112 -0400
++++ /opt/pinchpoint-gateway/src/middleware/agent-tools.js	2026-06-14 11:07:27.634731901 -0400
+@@ -178,6 +178,30 @@
+   };
+ }
+ 
++function normalizeAgentResult(toolName, agentResult) {
++  if (toolName !== 'shell_exec' || !agentResult || typeof agentResult !== 'object') {
++    return agentResult;
++  }
++
++  const data = typeof agentResult.data === 'string' ? agentResult.data : '';
++  const stderrMarker = '\n--- stderr ---\n';
++  const markerIndex = data.indexOf(stderrMarker);
++  const stdout = typeof agentResult.stdout === 'string'
++    ? agentResult.stdout
++    : (markerIndex >= 0 ? data.slice(0, markerIndex) : data);
++  const stderr = typeof agentResult.stderr === 'string'
++    ? agentResult.stderr
++    : (markerIndex >= 0 ? data.slice(markerIndex + stderrMarker.length) : '');
++
++  return {
++    ...agentResult,
++    data: data || (stderr ? `${stdout}${stderrMarker}${stderr}` : stdout),
++    stdout,
++    stderr,
++    note: 'stdout/stderr normalized by gateway from the local agent data field',
++  };
++}
++
+ /**
+  * Handle agent tool calls from an LLM response.
+  * Finds agent tool calls, routes them to the user's local agent,
+@@ -238,7 +262,7 @@
+ 
+       toolResults.push({
+         tool_call_id: tc.id,
+-        content: JSON.stringify(agentResult),
++        content: JSON.stringify(normalizeAgentResult(toolName, agentResult)),
+       });
+     } catch (err) {
+       console.error(`[agent-tools] ${toolName} failed: ${err.message}`);
