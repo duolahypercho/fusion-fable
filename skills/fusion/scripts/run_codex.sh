@@ -16,8 +16,14 @@
 #   access as a normal trusted Codex CLI run. This is needed for macOS keychain-backed tools like `gh`.
 # - `-c tools.web_search=true` enables the web search tool.
 # - The throwaway copy is deleted when the panelist exits.
+# - There is no `timeout`/`gtimeout` on stock macOS, so the codex run is wrapped in a self-contained
+#   perl timeout helper (FUSION_TIMEOUT, default 300s — see _fusion_lib.sh). On timeout the runner
+#   exits 124 so the orchestrator drops GPT-5.5 and degrades the panel gracefully.
 
 set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/_fusion_lib.sh"
 
 prompt_file="${1:?usage: run_codex.sh <prompt_file> <output_file> [reasoning_effort]}"
 output_file="${2:?usage: run_codex.sh <prompt_file> <output_file> [reasoning_effort]}"
@@ -79,7 +85,7 @@ if command -v gh >/dev/null 2>&1; then
   fi
 fi
 
-codex exec \
+_run_with_timeout "$FUSION_TIMEOUT" codex exec \
   --skip-git-repo-check \
   --ephemeral \
   --cd "$panel_cwd" \
@@ -91,6 +97,11 @@ codex exec \
   > "$scratch/stream.log" 2>&1
 
 status=$?
+if [ $status -eq 124 ]; then
+  echo "[run_codex.sh] codex timed out after ${FUSION_TIMEOUT}s; tail of log:" >&2
+  tail -20 "$scratch/stream.log" >&2
+  exit 124
+fi
 if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   echo "[run_codex.sh] codex exited $status; tail of log:" >&2
   tail -20 "$scratch/stream.log" >&2
