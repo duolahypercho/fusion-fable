@@ -20,7 +20,7 @@ chmod +x "$CLAUDE_DIR/skills/fusion/scripts/"*.sh
 
 echo "✓ Installed Fusion-Fable into $CLAUDE_DIR"
 echo "    skill    : $CLAUDE_DIR/skills/fusion"
-echo "    commands : /fusion-opus4.8  /fusion-gpt5.5"
+echo "    commands : /fusion-opus4.8  /fusion-gpt5.5  /fusion-3"
 echo
 
 # Report which chains are usable on this machine.
@@ -32,10 +32,10 @@ if have codex; then
 else
   echo "  opus4.8-gpt5.5               : needs the 'codex' CLI (install + log in for GPT-5.5)"
 fi
-if have gemini; then
-  echo "  opus4.8-gpt5.5-gemini3.1pro  : ready (gemini found)"
+if have agy; then
+  echo "  opus4.8-gpt5.5-gemini3.1pro  : ready (agy found: $(agy --version 2>/dev/null | head -1))"
 else
-  echo "  opus4.8-gpt5.5-gemini3.1pro  : needs the 'gemini' CLI (install + log in for Gemini 3.1 Pro)"
+  echo "  opus4.8-gpt5.5-gemini3.1pro  : needs the 'agy' CLI (Antigravity; install + seed its keyring for Gemini 3.1 Pro)"
 fi
 echo
 echo "Next: restart Claude Code (or run /reload-skills) so 'fusion' and the slash commands load."
