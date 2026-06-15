@@ -52,11 +52,20 @@ if [ -z "${FUSION_AGY_NO_MODEL:-}" ] && [ -n "$AGY_MODEL" ]; then
   agy_args+=( --model "$AGY_MODEL" )
 fi
 
-# --- Voie A: pseudo-TTY ---------------------------------------------------------------
-# sed strips ANSI colour sequences (ESC[...m) and the literal "^D" caret-notation that
-# macOS `script` echoes for the EOF; tr removes any remaining raw control bytes a pty
-# leaves behind (CR, etc.) while keeping tab + newline.
-_run_with_timeout "$EXT_TIMEOUT" script -q /dev/null agy "${agy_args[@]}" \
+# --- Voie A: pseudo-TTY (survives socket stdio in cmux / headless) ---------------------
+# agy bug #76 needs a real TTY on stdout. `script -q /dev/null` calls tcgetattr() on fd 0 and
+# ABORTS when the orchestrator runs in a socket (cmux/headless: "tcgetattr/ioctl: Operation not
+# supported on socket"), so agy never launches and voie A *and* voie B come back empty. Prefer a
+# pty.fork()-based Python runner that gives the CHILD a fresh pty and never touches the parent's
+# fd 0 termios; fall back to `script` only if python3 is missing (plain TTY contexts).
+# sed strips ANSI (ESC[...m) and the literal "^D" caret-notation; tr removes residual control
+# bytes (CR, etc.) while keeping tab + newline.
+if have python3; then
+  pty_runner=( python3 "$SCRIPT_DIR/_pty_run.py" )
+else
+  pty_runner=( script -q /dev/null )
+fi
+_run_with_timeout "$EXT_TIMEOUT" "${pty_runner[@]}" agy "${agy_args[@]}" \
   2> "$scratch/stderr.log" \
   | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\^D//g' \
   | LC_ALL=C tr -d '\000-\010\013-\037\177' > "$output_file"
