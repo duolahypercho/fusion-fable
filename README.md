@@ -85,7 +85,9 @@ final answer) for auditing.
 - For the 3-model panel: the **`agy`** (Antigravity) CLI installed and its keyring seeded — run `agy` once
   interactively to complete the Google OAuth, after which headless runs reuse that login. `run_gemini.sh`
   works around agy's print-mode bug (empty stdout under no TTY) by running it under a pseudo-TTY with a
-  transcript-JSONL fallback and a hard anti-empty guard, so it never returns a silently empty answer.
+  transcript-JSONL fallback and a hard anti-empty guard, so it never returns a silently empty answer. The
+  pseudo-TTY is allocated by a `pty.fork()` Python helper (`_pty_run.py`) so it keeps working when the
+  orchestrator itself runs in a socket (cmux / headless), where `script` aborts on `tcgetattr`.
 
 Only the **`opus4.8-4.8`** panel is truly zero-setup; the GPT-5.5 and Gemini panels light up once their
 CLIs are installed and authenticated. Note: there is no `timeout`/`gtimeout` on stock macOS, so the runners
@@ -98,6 +100,7 @@ skills/fusion/
   SKILL.md                  detect → preflight → blind fan-out → judge → grounded final → save
   scripts/
     _fusion_lib.sh          shared helpers: perl-based per-panelist timeout, have()
+    _pty_run.py             pty.fork() runner so agy gets a TTY even under socket stdio (cmux/headless)
     detect_panel.sh         picks the richest available panel
     preflight.sh            non-blocking token/call estimate + Codex cap reminder
     run_codex.sh            runs the GPT-5.5 panelist (web + bash) with a timeout, captures its answer
