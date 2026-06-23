@@ -5,8 +5,8 @@ description: >-
   independently with web search and bash, none seeing the others' work — then having Opus 4.8 judge every
   response into a structured analysis (consensus, contradictions, partial coverage, unique insights, blind
   spots) and write a final answer grounded in it. The panel is two independent Opus 4.8 runs (slug
-  opus4.8-4.8), Opus 4.8 + GPT-5.5 via codex (opus4.8-gpt5.5), or those plus Gemini 3.1 Pro via agy
-  (opus4.8-gpt5.5-gemini3.1pro). Opus always judges and writes the final answer — the pipeline can't be
+  opus4.8-4.8), Opus 4.8 + GPT-5.5 via codex (opus4.8-gpt5.5), Opus 4.8 + Gemini 3.1 Pro via agy
+  (opus4.8-gemini3.1pro), or all three (opus4.8-gpt5.5-gemini3.1pro). Opus always judges and writes the final answer — the pipeline can't be
   reversed. Runs on local CLI subscriptions (no metered API), saves a timestamped provenance .md per run,
   and answers in French by default. Use this whenever the user asks to "run it through Fusion", says
   /fusion, wants a multi-model / panel / ensemble answer, wants a question cross-checked across models, or
@@ -48,6 +48,7 @@ It prints a `SLUG=` line recommending the richest panel possible on this machine
 | --- | --- | --- |
 | `opus4.8-4.8` | the same prompt run twice as 2 independent Opus 4.8 panelists | nothing — always available |
 | `opus4.8-gpt5.5` | Opus 4.8 + GPT-5.5 in parallel | `codex` CLI |
+| `opus4.8-gemini3.1pro` | Opus 4.8 + Gemini 3.1 Pro in parallel | `agy` CLI |
 | `opus4.8-gpt5.5-gemini3.1pro` | Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro in parallel | `codex` + `agy` CLIs |
 
 If the user named a slug (or used a pinned `/fusion-*` command), honor it — but if a required CLI is
@@ -75,6 +76,8 @@ Launch **all panelists in a single turn** so they run concurrently:
 
 - **Opus 4.8 panelist(s)** → the `Agent` tool, `subagent_type: general-purpose` (web + bash built in).
   For `opus4.8-4.8`, spawn **two** independent Opus subagents with the *same* prompt — two cold runs.
+  For every other slug (`opus4.8-gpt5.5`, `opus4.8-gemini3.1pro`, `opus4.8-gpt5.5-gemini3.1pro`) spawn
+  **exactly one** Opus panelist alongside the external panelist(s).
   Spawn them in the same message so they run at once. When each returns, write its answer to a temp file
   for provenance: `/tmp/fusion_opusA.md` (and `/tmp/fusion_opusB.md` for the second Opus run).
 - **GPT-5.5 panelist** (if slug includes it) → write its prompt to a temp file, then run:
@@ -107,7 +110,9 @@ subagents, not you, so your synthesis reads all answers fresh.
 **Graceful degradation.** If an external panelist exits non-zero, remove it, record a one-line degradation
 note (e.g. `gemini dropped: agy empty -> opus4.8-gpt5.5`), and continue with what's left. Order of fallback:
 `opus4.8-gpt5.5-gemini3.1pro` → `opus4.8-gpt5.5` → ultimate `opus4.8-4.8` (two independent Opus runs, zero
-external CLI). A degraded run still completes; never abort because one CLI failed.
+external CLI). For `opus4.8-gemini3.1pro`, dropping Gemini falls back to `opus4.8-4.8` (spawn a second
+independent Opus panelist) so the judge still sees two blind answers. A degraded run still completes; never
+abort because one CLI failed.
 
 ## Step 3 — Judge (pick the track that fits the task)
 

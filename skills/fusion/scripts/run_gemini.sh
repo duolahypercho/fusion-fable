@@ -60,12 +60,18 @@ fi
 # fd 0 termios; fall back to `script` only if python3 is missing (plain TTY contexts).
 # sed strips ANSI (ESC[...m) and the literal "^D" caret-notation; tr removes residual control
 # bytes (CR, etc.) while keeping tab + newline.
-if have python3; then
+if have python3 && python3 -c 'import pty' 2>/dev/null; then
   pty_runner=( python3 "$SCRIPT_DIR/_pty_run.py" )
-else
+elif have script; then
   pty_runner=( script -q /dev/null )
+else
+  pty_runner=()
 fi
-_run_with_timeout "$EXT_TIMEOUT" "${pty_runner[@]}" agy "${agy_args[@]}" \
+orig_id="${ANTIGRAVITY_CONVERSATION_ID:-}"
+unset ANTIGRAVITY_CONVERSATION_ID
+export ANTIGRAVITY_AGENT=0
+
+_run_with_timeout "$EXT_TIMEOUT" "${pty_runner[@]}" agy "${agy_args[@]}" < /dev/null \
   2> "$scratch/stderr.log" \
   | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\^D//g' \
   | LC_ALL=C tr -d '\000-\010\013-\037\177' > "$output_file"
@@ -74,10 +80,26 @@ _run_with_timeout "$EXT_TIMEOUT" "${pty_runner[@]}" agy "${agy_args[@]}" \
 if [ ! -s "$output_file" ]; then
   echo "[run_gemini.sh] voie A vide (bug #76 probable) — fallback transcript JSONL." >&2
   tr="$(find "$BRAIN_DIR" -name transcript.jsonl -newer "$ts_marker" -print0 2>/dev/null \
-        | xargs -0 ls -t 2>/dev/null | head -1)"
+        | xargs -0 ls -t 2>/dev/null | awk -v oid="$orig_id" 'oid == "" || index($0, oid) == 0 {print; exit}')"
   if [ -n "$tr" ] && [ -s "$tr" ]; then
-    jq -rs 'map(select(.source=="MODEL" and .status=="DONE" and .type=="PLANNER_RESPONSE"))
-            | (last // {}) | .content // empty' "$tr" > "$output_file" 2>/dev/null
+    if have jq; then
+      jq -rs 'map(select(.source=="MODEL" and .status=="DONE" and .type=="PLANNER_RESPONSE"))
+              | (last // {}) | .content // empty' "$tr" > "$output_file" 2>/dev/null
+    elif have python3; then
+      python3 -c '
+import sys, json
+ans = ""
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+        if d.get("source") == "MODEL" and d.get("status") == "DONE" and d.get("type") == "PLANNER_RESPONSE":
+            if "content" in d and d["content"]:
+                ans = d["content"]
+    except: pass
+if ans:
+    print(ans, end="")
+' < "$tr" > "$output_file" 2>/dev/null
+    fi
   fi
 fi
 

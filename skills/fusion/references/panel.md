@@ -27,6 +27,7 @@ answers meet. Cross-pollination before the judge defeats the entire mechanism.
 - `opus4.8-4.8` — the **same prompt run twice** as two independent Opus 4.8 panelists (Agent subagents),
   then judged. Same model, two cold runs.
 - `opus4.8-gpt5.5` — Opus 4.8 and GPT-5.5 (codex) answer **in parallel**, then judged.
+- `opus4.8-gemini3.1pro` — Opus 4.8 and Gemini 3.1 Pro (agy) answer **in parallel**, then judged.
 - `opus4.8-gpt5.5-gemini3.1pro` — Opus 4.8, GPT-5.5, and Gemini 3.1 Pro answer in parallel, then judged.
 
 In every case Opus 4.8 is also the judge/synthesizer, and the judge is kept separate from the panelists

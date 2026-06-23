@@ -14,7 +14,7 @@ prompt_file="${2:?usage: preflight.sh <slug> <prompt_file>}"
 
 case "$slug" in
   opus4.8-gpt5.5-gemini3.1pro) n=3 ;;
-  opus4.8-gpt5.5|opus4.8-4.8)  n=2 ;;
+  opus4.8-gpt5.5|opus4.8-gemini3.1pro|opus4.8-4.8)  n=2 ;;
   *)                           n=2 ;;
 esac
 
