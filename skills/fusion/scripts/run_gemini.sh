@@ -52,6 +52,31 @@ if [ -z "${FUSION_AGY_NO_MODEL:-}" ] && [ -n "$AGY_MODEL" ]; then
   agy_args+=( --model "$AGY_MODEL" )
 fi
 
+# --- Voie W: Windows transcript capture (no PTY on this platform) ----------------------
+# On Windows (MSYS/Git-Bash) there is no usable PTY: python lacks the `pty`/`termios`
+# modules and `script` is absent, so voie A always yields empty stdout. agy DOES contact
+# Gemini and writes the answer to its per-conversation transcript on disk. agy_capture.py
+# runs the prompt in an isolated workspace dir and reads the MODEL response straight back
+# out of that transcript. Use it directly here and skip voie A/B.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    cap_py="$SCRIPT_DIR/agy_capture.py"
+    if have python && [ -f "$cap_py" ]; then
+      # No --model: agy's configured default is already Gemini 3.1 Pro (High), and passing
+      # --model in print mode can hang (see bug notes). Opt in via FUSION_AGY_FORCE_MODEL.
+      AGY_MODEL="${FUSION_AGY_FORCE_MODEL:-}" \
+      AGY_POLL_SECONDS="$FUSION_TIMEOUT" \
+        python "$cap_py" "$(cat "$prompt_file")" > "$output_file" 2> "$scratch/stderr.log"
+      if [ -s "$output_file" ]; then
+        echo "[run_gemini.sh] ok (voie W: Windows transcript capture) -> $output_file"
+        exit 0
+      fi
+      echo "[run_gemini.sh] voie W empty — falling through to voie A/B." >&2
+      [ -s "$scratch/stderr.log" ] && tail -5 "$scratch/stderr.log" >&2
+    fi
+    ;;
+esac
+
 # --- Voie A: pseudo-TTY (survives socket stdio in cmux / headless) ---------------------
 # agy bug #76 needs a real TTY on stdout. `script -q /dev/null` calls tcgetattr() on fd 0 and
 # ABORTS when the orchestrator runs in a socket (cmux/headless: "tcgetattr/ioctl: Operation not
