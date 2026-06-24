@@ -22,6 +22,15 @@ import tempfile
 import time
 from pathlib import Path
 
+# agy answers routinely contain non-Latin-1 glyphs (≤, ≥, –, ✓, math symbols). On Windows,
+# Python defaults stdout to cp1252 when redirected to a pipe/file, which raises
+# UnicodeEncodeError mid-write and leaves the output empty. Force UTF-8.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 HOME = Path(os.path.expanduser("~"))
 CLI = HOME / ".gemini" / "antigravity-cli"
 LCJ = CLI / "cache" / "last_conversations.json"
