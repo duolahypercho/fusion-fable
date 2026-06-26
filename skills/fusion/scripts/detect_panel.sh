@@ -21,6 +21,7 @@ printf "  gemini3.1pro : %s (agy CLI)\n"    "$([ "$agy_ok"   = true ] && echo ye
 echo
 
 if   $codex_ok && $agy_ok; then slug="opus4.8-gpt5.5-gemini3.1pro"
+elif $agy_ok;              then slug="opus4.8-gemini3.1pro"
 elif $codex_ok;            then slug="opus4.8-gpt5.5"
 else                            slug="opus4.8-4.8"
 fi
