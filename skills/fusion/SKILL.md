@@ -7,8 +7,8 @@ description: >-
   spots) and write a final answer grounded in it. The panel is two independent Opus 4.8 runs (slug
   opus4.8-4.8), Opus 4.8 + GPT-5.5 via codex (opus4.8-gpt5.5), Opus 4.8 + Gemini 3.1 Pro via agy
   (opus4.8-gemini3.1pro), or all three (opus4.8-gpt5.5-gemini3.1pro). Opus always judges and writes the final answer — the pipeline can't be
-  reversed. Runs on local CLI subscriptions (no metered API), saves a timestamped provenance .md per run,
-  and answers in French by default. Use this whenever the user asks to "run it through Fusion", says
+  reversed. Runs on local CLI subscriptions (no metered API), and saves a timestamped provenance .md per
+  run. Use this whenever the user asks to "run it through Fusion", says
   /fusion, wants a multi-model / panel / ensemble answer, wants a question cross-checked across models, or
   wants a higher-confidence answer with consensus and blind spots surfaced — even if they don't say
   "fusion". General-purpose: any topic (research, law, strategy, technical, personal). Best for high-stakes
